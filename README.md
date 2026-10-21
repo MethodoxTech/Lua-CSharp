@@ -10,6 +10,10 @@ High performance Lua interpreter implemented in C# for .NET and Unity
 
 English | [日本語](README_JA.md)
 
+> **About this fork.** This is Methodox's fork of [nuskey8/Lua-CSharp](https://github.com/nuskey8/Lua-CSharp), kept for the Lua interpreter of [Parcel NExT](https://github.com/Methodox-Technologies/Parcel_NExT)'s PocketOS. Its `methodox` branch is the v0.5.7 release (6f449d2, the commit the LuaCSharp 0.5.7 package names) plus the changes listed here; `main` is left as upstream had it when the fork was made. The licence and copyright are upstream's, unchanged.
+>
+> - **The length operator is logarithmic.** `LuaTable.ArrayLength`, which `#t`, `rawlen` and the table library use, finds a border by binary search as C Lua's `luaH_getn` does, instead of scanning from the first slot; `LuaTable.Insert` and `RemoveAt` shift only the elements up to that border instead of the whole capacity. Appending with `t[#t + 1] = v`, `table.insert` and `table.remove` were quadratic; 100,000 of each now take about 22 ms, 66 ms and 53 ms where they took 2.4 s, 5.7 s and 5.3 s. On a table without holes the length is the same as before; with holes it is a border, not necessarily the first, which is what Lua 5.2 defines `#` to be. This could be offered upstream, though upstream's `main` has since taken a different route to the same end (a cached non-nil prefix).
+
 ## Overview
 
 Lua-CSharp is a library that provides a Lua interpreter implemented in C#. By integrating Lua-CSharp, you can easily embed Lua scripts into your .NET applications.

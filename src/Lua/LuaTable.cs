@@ -94,15 +94,35 @@ public sealed class LuaTable : IEnumerable<KeyValuePair<LuaValue, LuaValue>>
     {
         get
         {
-            for (var i = 0; i < array.Length; i++)
+            // A border of the array part (n with t[n] non-nil and t[n+1] nil), found by binary
+            // search as C Lua's luaH_getn does. Without holes it is the first nil; with holes it
+            // may be any border, which is what Lua 5.2 defines # to be.
+            var hi = array.Length;
+            if (hi == 0 || array[0].Type is LuaValueType.Nil)
             {
-                if (array[i].Type is LuaValueType.Nil)
+                return 0;
+            }
+
+            if (array[hi - 1].Type is not LuaValueType.Nil)
+            {
+                return hi;
+            }
+
+            var lo = 1; // array[lo - 1] is non-nil and array[hi - 1] is nil
+            while (hi - lo > 1)
+            {
+                var mid = (lo + hi) >>> 1;
+                if (array[mid - 1].Type is LuaValueType.Nil)
                 {
-                    return i;
+                    hi = mid;
+                }
+                else
+                {
+                    lo = mid;
                 }
             }
 
-            return array.Length;
+            return lo;
         }
     }
 
@@ -172,43 +192,41 @@ public sealed class LuaTable : IEnumerable<KeyValuePair<LuaValue, LuaValue>>
         var arrayIndex = index - 1;
         var value = array[arrayIndex];
 
-        if (arrayIndex < array.Length - 1)
+        // Only the occupied part moves: everything after the border is nil already, so
+        // shifting the whole capacity made removing from the end cost as much as the array.
+        var length = ArrayLength;
+        if (arrayIndex < length)
         {
-            array.AsSpan(arrayIndex + 1).CopyTo(array.AsSpan(arrayIndex));
+            array.AsSpan(index, length - index).CopyTo(array.AsSpan(arrayIndex));
+            array[length - 1] = default;
         }
-
-        array[^1] = default;
+        else
+        {
+            array[arrayIndex] = default;
+        }
 
         return value;
     }
 
     public void Insert(int index, LuaValue value)
     {
-        if (index <= 0 || index > array.Length + 1)
+        var length = ArrayLength;
+        if (index <= 0 || index > length + 1)
         {
             throw new IndexOutOfRangeException();
         }
 
+        while (length == array.Length)
+        {
+            // Growing a full array part can pull integer keys out of the hash part, which can
+            // only move the border further out.
+            EnsureArrayCapacity(length + 1);
+            length = ArrayLength;
+        }
+
+        // Only the occupied part moves; array[length] is nil, so nothing past the border is lost.
         var arrayIndex = index - 1;
-        var distance = index - array.Length;
-        if (distance > MaxDistance)
-        {
-            dictionary[index] = value;
-            return;
-        }
-
-        if (index > array.Length || array[^1].Type != LuaValueType.Nil)
-        {
-            EnsureArrayCapacity(array.Length + 1);
-        }
-
-        if (arrayIndex != array.Length - 1)
-        {
-            array
-                .AsSpan(arrayIndex, array.Length - arrayIndex - 1)
-                .CopyTo(array.AsSpan(arrayIndex + 1));
-        }
-
+        array.AsSpan(arrayIndex, length - arrayIndex).CopyTo(array.AsSpan(index));
         array[arrayIndex] = value;
     }
 
